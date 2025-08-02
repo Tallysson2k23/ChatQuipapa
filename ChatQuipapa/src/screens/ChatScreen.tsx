@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform, SafeAreaView
+  StyleSheet, KeyboardAvoidingView, Platform, SafeAreaView, Image
 } from 'react-native';
 import {
   collection, addDoc, onSnapshot, orderBy,
@@ -10,12 +10,19 @@ import {
 import { auth, db } from '../../firebaseConfig';
 import { useRoute, useNavigation } from '@react-navigation/native';
 
+type Mensagem = {
+  id: string;
+  texto: string;
+  remetente: string;
+  timestamp?: any;
+};
+
 export default function ChatScreen() {
-  const [mensagens, setMensagens] = useState<any[]>([]);
+  const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [novaMensagem, setNovaMensagem] = useState('');
   const [nomeOutroUsuario, setNomeOutroUsuario] = useState('');
-
-  const flatListRef = useRef<FlatList>(null); // Referência para a lista
+  const [fotoOutroUsuario, setFotoOutroUsuario] = useState('');
+  const flatListRef = useRef<FlatList>(null);
 
   const route = useRoute<any>();
   const { conversaId, usuarios } = route.params;
@@ -30,34 +37,61 @@ export default function ChatScreen() {
       const lista = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      }));
-      setMensagens(lista);
+      })) as Mensagem[];
 
-      // Scroll automático após atualizar mensagens
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+      setMensagens(lista);
     });
 
     return () => unsubscribe();
   }, [conversaId]);
 
-  useEffect(() => {
-    const carregarOutroUsuario = async () => {
-      const uidOutro = usuarios.find((uid: string) => uid !== usuarioAtual?.uid);
-      if (!uidOutro) return;
+  // Scroll para o fim quando mensagens mudarem
+  useLayoutEffect(() => {
+    if (mensagens.length > 0) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 150);
+    }
+  }, [mensagens]);
 
-      const docRef = doc(db, 'usuarios', uidOutro);
-      const snapshot = await getDoc(docRef);
-      if (snapshot.exists()) {
-        const dados = snapshot.data();
-        setNomeOutroUsuario(dados.nome || 'Usuário');
-        navigation.setOptions({ title: dados.nome || 'Chat' });
-      }
-    };
+useLayoutEffect(() => {
+  const carregarOutroUsuario = async () => {
+    const uidOutro = usuarios.find((uid: string) => uid !== usuarioAtual?.uid);
+    if (!uidOutro) return;
 
-    carregarOutroUsuario();
-  }, [usuarios, usuarioAtual]);
+    const docRef = doc(db, 'usuarios', uidOutro);
+    const snapshot = await getDoc(docRef);
+    if (!snapshot.exists()) return;
+
+    const dados = snapshot.data();
+    const nome = dados.nome || 'Usuário';
+    const foto = dados.foto || '';
+
+    setNomeOutroUsuario(nome);
+    setFotoOutroUsuario(foto);
+
+    // Atualiza o header personalizado com nome e foto
+navigation.setOptions({
+  headerTitle: () => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: -9 }}>
+      {foto ? (
+        <Image source={{ uri: foto }} style={styles.headerFoto} />
+      ) : (
+        <View style={styles.avatarPlaceholder}>
+          <Text style={{ fontSize: 20 }}>👤</Text>
+            </View>
+          )}
+          <Text style={styles.headerNome}>{nome}</Text>
+        </View>
+      ),
+      headerTitleAlign: 'left', // opcional para garantir alinhamento
+    });
+  };
+
+  carregarOutroUsuario();
+}, [navigation, usuarios, usuarioAtual]);
+
+
 
   const enviarMensagem = async () => {
     if (!novaMensagem.trim() || !usuarioAtual) return;
@@ -84,22 +118,37 @@ export default function ChatScreen() {
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
+        keyboardVerticalOffset={90}
       >
         <FlatList
           ref={flatListRef}
           data={mensagens}
-          keyExtractor={item => item.id}
+          keyExtractor={(item) => item.id}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.listaMensagens}
-          renderItem={({ item }) => (
-            <View style={[
-              styles.mensagem,
-              item.remetente === usuarioAtual?.uid ? styles.eu : styles.outro
-            ]}>
-              <Text style={styles.texto}>{item.texto}</Text>
-            </View>
-          )}
+renderItem={({ item }) => {
+  const isMinhaMensagem = item.remetente === usuarioAtual?.uid;
+  return (
+    <View
+      style={[
+        styles.linhaMensagem,
+        { justifyContent: isMinhaMensagem ? 'flex-end' : 'flex-start' }
+      ]}
+    >
+      {!isMinhaMensagem && fotoOutroUsuario ? (
+        <Image source={{ uri: fotoOutroUsuario }} style={styles.fotoMensagem} />
+      ) : null}
+
+      <View style={[
+        styles.mensagem,
+        isMinhaMensagem ? styles.eu : styles.outro
+      ]}>
+        <Text style={styles.texto}>{item.texto}</Text>
+      </View>
+    </View>
+  );
+}}
+
         />
 
         <View style={styles.areaInput}>
@@ -181,5 +230,41 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 15
-  }
+  },
+  avatarPlaceholder: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#eee',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+
+  linhaMensagem: {
+  flexDirection: 'row',
+  alignItems: 'flex-end',
+  marginBottom: 8,
+},
+
+fotoMensagem: {
+  width: 36,
+  height: 36,
+  borderRadius: 18,
+  marginRight: 6,
+},
+
+headerFoto: {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  marginRight: 10,
+},
+
+headerNome: {
+  fontSize: 18,
+  fontWeight: 'bold',
+  color: '#111',
+}
+
+
 });

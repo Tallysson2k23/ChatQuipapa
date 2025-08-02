@@ -1,11 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { onSnapshot, collection, query, where, doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebaseConfig';
 import { useNavigation } from '@react-navigation/native';
 
+type Conversa = {
+  id: string;
+  usuarios: string[];
+  ultimaMensagem?: string;
+  nomeOutroUsuario: string;
+  fotoOutroUsuario?: string;
+};
+
 export default function ChatListScreen() {
-  const [conversas, setConversas] = useState<any[]>([]);
+  const [conversas, setConversas] = useState<Conversa[]>([]);
   const navigation = useNavigation();
   const usuarioAtual = auth.currentUser;
 
@@ -24,17 +32,23 @@ export default function ChatListScreen() {
           const outroUid = dadosConversa.usuarios.find((uid: string) => uid !== usuarioAtual.uid);
 
           let nomeOutro = 'Usuário';
+          let fotoOutro = '';
+
           if (outroUid) {
             const snap = await getDoc(doc(db, 'usuarios', outroUid));
             if (snap.exists()) {
-              nomeOutro = snap.data().nome || 'Usuário';
+              const data = snap.data();
+              nomeOutro = data.nome || 'Usuário';
+              fotoOutro = data.foto || '';
             }
           }
 
           return {
             id: docItem.id,
-            ...dadosConversa,
-            nomeOutroUsuario: nomeOutro
+            usuarios: dadosConversa.usuarios,
+            ultimaMensagem: dadosConversa.ultimaMensagem,
+            nomeOutroUsuario: nomeOutro,
+            fotoOutroUsuario: fotoOutro
           };
         })
       );
@@ -45,7 +59,7 @@ export default function ChatListScreen() {
     return () => unsubscribe();
   }, [usuarioAtual]);
 
-  const abrirConversa = (conversa: any) => {
+  const abrirConversa = (conversa: Conversa) => {
     navigation.navigate('Chat', {
       conversaId: conversa.id,
       usuarios: conversa.usuarios
@@ -58,13 +72,22 @@ export default function ChatListScreen() {
 
       <FlatList
         data={conversas}
-        keyExtractor={item => item.id}
+        keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <TouchableOpacity onPress={() => abrirConversa(item)} style={styles.itemConversa}>
-            <Text style={styles.nome}>
-              {item.nomeOutroUsuario}
-            </Text>
-            <Text>{item.ultimaMensagem || 'Sem mensagens ainda'}</Text>
+            <View style={styles.linha}>
+              {item.fotoOutroUsuario ? (
+                <Image source={{ uri: item.fotoOutroUsuario }} style={styles.avatar} />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Text style={{ color: '#999' }}>👤</Text>
+                </View>
+              )}
+              <View>
+                <Text style={styles.nome}>{item.nomeOutroUsuario}</Text>
+                <Text>{item.ultimaMensagem || 'Sem mensagens ainda'}</Text>
+              </View>
+            </View>
           </TouchableOpacity>
         )}
       />
@@ -92,12 +115,32 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   itemConversa: {
-    padding: 12,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#ddd',
   },
+  linha: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   nome: {
     fontWeight: 'bold',
+    fontSize: 16,
+  },
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#ddd',
+  },
+  avatarPlaceholder: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#eee',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   botaoFlutuante: {
     position: 'absolute',
