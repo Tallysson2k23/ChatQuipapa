@@ -6,6 +6,9 @@ import CadastroScreen from '../screens/CadastroScreen';
 import ChatListScreen from '../screens/ChatListScreen';
 import ChatScreen from '../screens/ChatScreen';
 import ListaUsuariosScreen from '../screens/ListaUsuariosScreen';
+import PerfilUsuarioScreen from '../screens/PerfilUsuarioScreen';
+
+
 
 export type RootStackParamList = {
   Login: undefined;
@@ -37,12 +40,17 @@ export default function AppNavigator() {
         <Stack.Screen
           name="ChatList"
           component={ChatListScreen}
-          options={{ headerShown: false }}
+          options={{ headerShown: true }}
         />
         <Stack.Screen
           name="ListaUsuarios"
           component={ListaUsuariosScreen}
           options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+        name="PerfilUsuario" 
+        component={PerfilUsuarioScreen} 
+        options={{ title: 'Meu Perfil' }} 
         />
         <Stack.Screen
           name="Chat"

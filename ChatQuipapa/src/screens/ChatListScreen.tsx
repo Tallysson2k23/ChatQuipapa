@@ -1,8 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Image } from 'react-native';
-import { onSnapshot, collection, query, where, doc, getDoc } from 'firebase/firestore';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
+import {
+  View, Text, FlatList, TouchableOpacity, StyleSheet, Image
+} from 'react-native';
+import {
+  onSnapshot, collection, query, where, doc, getDoc
+} from 'firebase/firestore';
 import { auth, db } from '../../firebaseConfig';
 import { useNavigation } from '@react-navigation/native';
+import { Menu, Provider, IconButton } from 'react-native-paper';
 
 type Conversa = {
   id: string;
@@ -14,8 +19,12 @@ type Conversa = {
 
 export default function ChatListScreen() {
   const [conversas, setConversas] = useState<Conversa[]>([]);
+  const [menuVisible, setMenuVisible] = useState(false);
   const navigation = useNavigation();
   const usuarioAtual = auth.currentUser;
+
+  const abrirMenu = () => setMenuVisible(true);
+  const fecharMenu = () => setMenuVisible(false);
 
   useEffect(() => {
     if (!usuarioAtual?.uid) return;
@@ -35,11 +44,15 @@ export default function ChatListScreen() {
           let fotoOutro = '';
 
           if (outroUid) {
-            const snap = await getDoc(doc(db, 'usuarios', outroUid));
-            if (snap.exists()) {
-              const data = snap.data();
-              nomeOutro = data.nome || 'Usuário';
-              fotoOutro = data.foto || '';
+            try {
+              const snap = await getDoc(doc(db, 'usuarios', outroUid));
+              if (snap.exists()) {
+                const data = snap.data();
+                nomeOutro = data?.nome || 'Usuário';
+                fotoOutro = data?.foto || '';
+              }
+            } catch (e) {
+              console.log('Erro ao buscar usuário:', e);
             }
           }
 
@@ -59,6 +72,35 @@ export default function ChatListScreen() {
     return () => unsubscribe();
   }, [usuarioAtual]);
 
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <Menu
+          visible={menuVisible}
+          onDismiss={fecharMenu}
+          anchor={
+            <View style={{ paddingRight: 8 }}>
+              <IconButton
+                icon="dots-vertical"
+                onPress={abrirMenu}
+                size={24}
+              />
+            </View>
+          }
+        >
+          <Menu.Item
+            onPress={() => {
+              fecharMenu();
+              navigation.navigate('PerfilUsuario');
+            }}
+            title="Perfil"
+          />
+        </Menu>
+      ),
+      headerTitle: 'Suas Conversas',
+    });
+  }, [navigation, menuVisible]);
+
   const abrirConversa = (conversa: Conversa) => {
     navigation.navigate('Chat', {
       conversaId: conversa.id,
@@ -67,45 +109,52 @@ export default function ChatListScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.titulo}>Suas Conversas</Text>
+    <Provider>
+      <View style={styles.container}>
+        <Text style={styles.titulo}>Suas Conversas</Text>
 
-      <FlatList
-        data={conversas}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity onPress={() => abrirConversa(item)} style={styles.itemConversa}>
-            <View style={styles.linha}>
-              {item.fotoOutroUsuario ? (
-                <Image source={{ uri: item.fotoOutroUsuario }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={{ color: '#999' }}>👤</Text>
+        <FlatList
+          data={conversas}
+          keyExtractor={(item) => item.id}
+          ListEmptyComponent={
+            <Text style={{ textAlign: 'center', marginTop: 20, color: '#777' }}>
+              Nenhuma conversa encontrada.
+            </Text>
+          }
+          renderItem={({ item }) => (
+            <TouchableOpacity onPress={() => abrirConversa(item)} style={styles.itemConversa}>
+              <View style={styles.linha}>
+                {item.fotoOutroUsuario ? (
+                  <Image source={{ uri: item.fotoOutroUsuario }} style={styles.avatar} />
+                ) : (
+                  <View style={styles.avatarPlaceholder}>
+                    <Text style={{ color: '#999' }}>👤</Text>
+                  </View>
+                )}
+                <View>
+                  <Text style={styles.nome}>{item.nomeOutroUsuario}</Text>
+                  <Text>{item.ultimaMensagem || 'Sem mensagens ainda'}</Text>
                 </View>
-              )}
-              <View>
-                <Text style={styles.nome}>{item.nomeOutroUsuario}</Text>
-                <Text>{item.ultimaMensagem || 'Sem mensagens ainda'}</Text>
               </View>
-            </View>
-          </TouchableOpacity>
-        )}
-      />
+            </TouchableOpacity>
+          )}
+        />
 
-      <TouchableOpacity
-        style={styles.botaoFlutuante}
-        onPress={() => navigation.navigate('ListaUsuarios')}
-      >
-        <Text style={styles.botaoTexto}>+</Text>
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity
+          style={styles.botaoFlutuante}
+          onPress={() => navigation.navigate('ListaUsuarios')}
+        >
+          <Text style={styles.botaoTexto}>+</Text>
+        </TouchableOpacity>
+      </View>
+    </Provider>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 40,
+    paddingTop: 20,
     paddingHorizontal: 20,
     backgroundColor: '#fff',
   },

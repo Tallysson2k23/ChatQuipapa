@@ -10,12 +10,29 @@ import {
 import { auth, db } from '../../firebaseConfig';
 import { useRoute, useNavigation } from '@react-navigation/native';
 
+import { format } from 'date-fns';
+import pt from 'date-fns/locale/pt-BR';
+
 type Mensagem = {
   id: string;
   texto: string;
   remetente: string;
   timestamp?: any;
+  tipo?: 'mensagem' | 'data';
+  data?: string;
 };
+
+function formatarHora(timestamp: any) {
+  if (!timestamp) return '';
+  const data = timestamp.toDate();
+  return format(data, 'HH:mm');
+}
+
+function formatarDataDia(timestamp: any) {
+  if (!timestamp) return '';
+  const data = timestamp.toDate();
+  return format(data, "dd 'de' MMMM 'de' yyyy", { locale: pt });
+}
 
 export default function ChatScreen() {
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
@@ -34,18 +51,35 @@ export default function ChatScreen() {
     const q = query(mensagensRef, orderBy('timestamp', 'asc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const lista = snapshot.docs.map(doc => ({
+      const listaBase = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Mensagem[];
 
-      setMensagens(lista);
+      const agrupadas: Mensagem[] = [];
+      let ultimaData = '';
+
+      listaBase.forEach(msg => {
+        const dataFormatada = msg.timestamp ? formatarDataDia(msg.timestamp) : '';
+        if (dataFormatada && dataFormatada !== ultimaData) {
+          agrupadas.push({
+            id: `data-${dataFormatada}`,
+            tipo: 'data',
+            data: dataFormatada,
+            texto: '',
+            remetente: ''
+          });
+          ultimaData = dataFormatada;
+        }
+        agrupadas.push({ ...msg, tipo: 'mensagem' });
+      });
+
+      setMensagens(agrupadas);
     });
 
     return () => unsubscribe();
   }, [conversaId]);
 
-  // Scroll para o fim quando mensagens mudarem
   useLayoutEffect(() => {
     if (mensagens.length > 0) {
       setTimeout(() => {
@@ -54,44 +88,38 @@ export default function ChatScreen() {
     }
   }, [mensagens]);
 
-useLayoutEffect(() => {
-  const carregarOutroUsuario = async () => {
-    const uidOutro = usuarios.find((uid: string) => uid !== usuarioAtual?.uid);
-    if (!uidOutro) return;
+  useLayoutEffect(() => {
+    const carregarOutroUsuario = async () => {
+      const uidOutro = usuarios.find((uid: string) => uid !== usuarioAtual?.uid);
+      if (!uidOutro) return;
 
-    const docRef = doc(db, 'usuarios', uidOutro);
-    const snapshot = await getDoc(docRef);
-    if (!snapshot.exists()) return;
+      const docRef = doc(db, 'usuarios', uidOutro);
+      const snapshot = await getDoc(docRef);
+      if (!snapshot.exists()) return;
 
-    const dados = snapshot.data();
-    const nome = dados.nome || 'Usuário';
-    const foto = dados.foto || '';
+      const dados = snapshot.data();
+      setNomeOutroUsuario(dados.nome || 'Usuário');
+      setFotoOutroUsuario(dados.foto || '');
 
-    setNomeOutroUsuario(nome);
-    setFotoOutroUsuario(foto);
+      navigation.setOptions({
+        headerTitle: () => (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: -9 }}>
+            {dados.foto ? (
+              <Image source={{ uri: dados.foto }} style={styles.headerFoto} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Text style={{ fontSize: 20 }}>👤</Text>
+              </View>
+            )}
+            <Text style={styles.headerNome}>{dados.nome || 'Usuário'}</Text>
+          </View>
+        ),
+        headerTitleAlign: 'left',
+      });
+    };
 
-    // Atualiza o header personalizado com nome e foto
-navigation.setOptions({
-  headerTitle: () => (
-    <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: -9 }}>
-      {foto ? (
-        <Image source={{ uri: foto }} style={styles.headerFoto} />
-      ) : (
-        <View style={styles.avatarPlaceholder}>
-          <Text style={{ fontSize: 20 }}>👤</Text>
-            </View>
-          )}
-          <Text style={styles.headerNome}>{nome}</Text>
-        </View>
-      ),
-      headerTitleAlign: 'left', // opcional para garantir alinhamento
-    });
-  };
-
-  carregarOutroUsuario();
-}, [navigation, usuarios, usuarioAtual]);
-
-
+    carregarOutroUsuario();
+  }, [navigation, usuarios, usuarioAtual]);
 
   const enviarMensagem = async () => {
     if (!novaMensagem.trim() || !usuarioAtual) return;
@@ -113,6 +141,35 @@ navigation.setOptions({
     setNovaMensagem('');
   };
 
+  const renderItem = ({ item }: { item: Mensagem }) => {
+    if (item.tipo === 'data') {
+      return (
+        <View style={styles.dataContainer}>
+          <Text style={styles.dataTexto}>{item.data}</Text>
+        </View>
+      );
+    }
+
+    const isMinhaMensagem = item.remetente === usuarioAtual?.uid;
+    return (
+      <View
+        style={[
+          styles.linhaMensagem,
+          { justifyContent: isMinhaMensagem ? 'flex-end' : 'flex-start' }
+        ]}
+      >
+        {!isMinhaMensagem && fotoOutroUsuario ? (
+          <Image source={{ uri: fotoOutroUsuario }} style={styles.fotoMensagem} />
+        ) : null}
+
+        <View style={[styles.mensagem, isMinhaMensagem ? styles.eu : styles.outro]}>
+          <Text style={styles.texto}>{item.texto}</Text>
+          <Text style={styles.hora}>{formatarHora(item.timestamp)}</Text>
+        </View>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
@@ -124,31 +181,9 @@ navigation.setOptions({
           ref={flatListRef}
           data={mensagens}
           keyExtractor={(item) => item.id}
+          renderItem={renderItem}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.listaMensagens}
-renderItem={({ item }) => {
-  const isMinhaMensagem = item.remetente === usuarioAtual?.uid;
-  return (
-    <View
-      style={[
-        styles.linhaMensagem,
-        { justifyContent: isMinhaMensagem ? 'flex-end' : 'flex-start' }
-      ]}
-    >
-      {!isMinhaMensagem && fotoOutroUsuario ? (
-        <Image source={{ uri: fotoOutroUsuario }} style={styles.fotoMensagem} />
-      ) : null}
-
-      <View style={[
-        styles.mensagem,
-        isMinhaMensagem ? styles.eu : styles.outro
-      ]}>
-        <Text style={styles.texto}>{item.texto}</Text>
-      </View>
-    </View>
-  );
-}}
-
         />
 
         <View style={styles.areaInput}>
@@ -198,7 +233,13 @@ const styles = StyleSheet.create({
   },
   texto: {
     fontSize: 16,
-    color: '#111'
+    color: '#111',
+  },
+  hora: {
+    fontSize: 11,
+    color: '#555',
+    textAlign: 'right',
+    marginTop: 4,
   },
   areaInput: {
     flexDirection: 'row',
@@ -224,12 +265,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 25,
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
   },
   enviarTexto: {
     color: '#fff',
     fontWeight: 'bold',
-    fontSize: 15
+    fontSize: 15,
   },
   avatarPlaceholder: {
     width: 36,
@@ -237,34 +278,40 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: '#eee',
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
   },
-
   linhaMensagem: {
-  flexDirection: 'row',
-  alignItems: 'flex-end',
-  marginBottom: 8,
-},
-
-fotoMensagem: {
-  width: 36,
-  height: 36,
-  borderRadius: 18,
-  marginRight: 6,
-},
-
-headerFoto: {
-  width: 40,
-  height: 40,
-  borderRadius: 20,
-  marginRight: 10,
-},
-
-headerNome: {
-  fontSize: 18,
-  fontWeight: 'bold',
-  color: '#111',
-}
-
-
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginBottom: 8,
+  },
+  fotoMensagem: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 6,
+  },
+  headerFoto: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
+  },
+  headerNome: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111',
+  },
+  dataContainer: {
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  dataTexto: {
+    backgroundColor: '#d0d0d0',
+    color: '#333',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 10,
+    fontSize: 13,
+  },
 });
