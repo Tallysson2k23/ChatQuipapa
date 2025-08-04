@@ -1,16 +1,15 @@
 import React, { useEffect, useLayoutEffect, useState } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet, Image
+  View, Text, FlatList, TouchableOpacity, StyleSheet, Image, Alert
 } from 'react-native';
 import {
   onSnapshot, collection, query, where, doc, getDoc
 } from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
 import { auth, db } from '../../firebaseConfig';
 import { useNavigation } from '@react-navigation/native';
-import { Menu, Provider, IconButton } from 'react-native-paper';
+import { Menu, Provider, IconButton, Divider } from 'react-native-paper';
 import { enviarNotificacaoLocal } from '../utils/notificacoes';
-
-
 
 type Conversa = {
   id: string;
@@ -29,70 +28,78 @@ export default function ChatListScreen() {
   const abrirMenu = () => setMenuVisible(true);
   const fecharMenu = () => setMenuVisible(false);
 
-useEffect(() => {
-  if (!usuarioAtual?.uid) return;
+  // SAIR: faz logout e redireciona para Login
+  const sair = async () => {
+    try {
+      await signOut(auth);
+      fecharMenu();
+      // @ts-ignore (ajuste se o nome da rota de login for diferente)
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+    } catch (e: any) {
+      Alert.alert('Erro ao sair', e?.message ?? 'Tente novamente.');
+    }
+  };
 
-  const q = query(
-    collection(db, 'conversas'),
-    where('usuarios', 'array-contains', usuarioAtual.uid)
-  );
+  useEffect(() => {
+    if (!usuarioAtual?.uid) return;
 
-  let conversasAntigas: Record<string, string> = {}; // Armazena últimas mensagens anteriores
-
-  const unsubscribe = onSnapshot(q, async (snapshot) => {
-    const dados = await Promise.all(
-      snapshot.docs.map(async (docItem) => {
-        const dadosConversa = docItem.data();
-        const outroUid = dadosConversa.usuarios.find((uid: string) => uid !== usuarioAtual.uid);
-
-        let nomeOutro = 'Usuário';
-        let fotoOutro = '';
-
-        if (outroUid) {
-          try {
-            const snap = await getDoc(doc(db, 'usuarios', outroUid));
-            if (snap.exists()) {
-              const data = snap.data();
-              nomeOutro = data?.nome || 'Usuário';
-              fotoOutro = data?.foto || '';
-            }
-          } catch (e) {
-            console.log('Erro ao buscar usuário:', e);
-          }
-        }
-
-        // Verifica se é nova mensagem recebida de outro usuário
-        const ultimaMsg = dadosConversa.ultimaMensagem;
-        const conversaId = docItem.id;
-
-        const msgAnterior = conversasAntigas[conversaId];
-        const isNova = ultimaMsg && msgAnterior !== ultimaMsg;
-
-       const remetente = dadosConversa?.remetente || '';
-
-if (isNova && remetente !== usuarioAtual.uid) {
-  enviarNotificacaoLocal(nomeOutro, ultimaMsg);
-}
-
-
-        conversasAntigas[conversaId] = ultimaMsg;
-
-        return {
-          id: conversaId,
-          usuarios: dadosConversa.usuarios,
-          ultimaMensagem: ultimaMsg,
-          nomeOutroUsuario: nomeOutro,
-          fotoOutroUsuario: fotoOutro
-        };
-      })
+    const q = query(
+      collection(db, 'conversas'),
+      where('usuarios', 'array-contains', usuarioAtual.uid)
     );
 
-    setConversas(dados);
-  });
+    let conversasAntigas: Record<string, string> = {}; // últimas mensagens anteriores
 
-  return () => unsubscribe();
-}, [usuarioAtual]);
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      const dados = await Promise.all(
+        snapshot.docs.map(async (docItem) => {
+          const dadosConversa = docItem.data();
+          const outroUid = dadosConversa.usuarios.find((uid: string) => uid !== usuarioAtual.uid);
 
+          let nomeOutro = 'Usuário';
+          let fotoOutro = '';
+
+          if (outroUid) {
+            try {
+              const snap = await getDoc(doc(db, 'usuarios', outroUid));
+              if (snap.exists()) {
+                const data = snap.data();
+                nomeOutro = (data as any)?.nome || 'Usuário';
+                fotoOutro = (data as any)?.foto || '';
+              }
+            } catch (e) {
+              console.log('Erro ao buscar usuário:', e);
+            }
+          }
+
+          const ultimaMsg = dadosConversa.ultimaMensagem;
+          const conversaId = docItem.id;
+
+          const msgAnterior = conversasAntigas[conversaId];
+          const isNova = ultimaMsg && msgAnterior !== ultimaMsg;
+
+          const remetente = dadosConversa?.remetente || '';
+          if (isNova && remetente !== usuarioAtual.uid) {
+            enviarNotificacaoLocal(nomeOutro, ultimaMsg);
+          }
+
+          conversasAntigas[conversaId] = ultimaMsg;
+
+          return {
+            id: conversaId,
+            usuarios: dadosConversa.usuarios,
+            ultimaMensagem: ultimaMsg,
+            nomeOutroUsuario: nomeOutro,
+            fotoOutroUsuario: fotoOutro
+          };
+        })
+      );
+
+      setConversas(dados);
+    });
+
+    return () => unsubscribe();
+  }, [usuarioAtual]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -113,10 +120,13 @@ if (isNova && remetente !== usuarioAtual.uid) {
           <Menu.Item
             onPress={() => {
               fecharMenu();
+              // @ts-ignore
               navigation.navigate('PerfilUsuario');
             }}
             title="Perfil"
           />
+          <Divider />
+          <Menu.Item onPress={sair} title="Sair" />
         </Menu>
       ),
       headerTitle: 'Suas Conversas',
@@ -124,6 +134,7 @@ if (isNova && remetente !== usuarioAtual.uid) {
   }, [navigation, menuVisible]);
 
   const abrirConversa = (conversa: Conversa) => {
+    // @ts-ignore
     navigation.navigate('Chat', {
       conversaId: conversa.id,
       usuarios: conversa.usuarios
@@ -164,6 +175,7 @@ if (isNova && remetente !== usuarioAtual.uid) {
 
         <TouchableOpacity
           style={styles.botaoFlutuante}
+          // @ts-ignore
           onPress={() => navigation.navigate('ListaUsuarios')}
         >
           <Text style={styles.botaoTexto}>+</Text>
