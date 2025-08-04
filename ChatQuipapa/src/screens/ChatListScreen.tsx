@@ -8,6 +8,9 @@ import {
 import { auth, db } from '../../firebaseConfig';
 import { useNavigation } from '@react-navigation/native';
 import { Menu, Provider, IconButton } from 'react-native-paper';
+import { enviarNotificacaoLocal } from '../utils/notificacoes';
+
+
 
 type Conversa = {
   id: string;
@@ -26,51 +29,70 @@ export default function ChatListScreen() {
   const abrirMenu = () => setMenuVisible(true);
   const fecharMenu = () => setMenuVisible(false);
 
-  useEffect(() => {
-    if (!usuarioAtual?.uid) return;
+useEffect(() => {
+  if (!usuarioAtual?.uid) return;
 
-    const q = query(
-      collection(db, 'conversas'),
-      where('usuarios', 'array-contains', usuarioAtual.uid)
+  const q = query(
+    collection(db, 'conversas'),
+    where('usuarios', 'array-contains', usuarioAtual.uid)
+  );
+
+  let conversasAntigas: Record<string, string> = {}; // Armazena últimas mensagens anteriores
+
+  const unsubscribe = onSnapshot(q, async (snapshot) => {
+    const dados = await Promise.all(
+      snapshot.docs.map(async (docItem) => {
+        const dadosConversa = docItem.data();
+        const outroUid = dadosConversa.usuarios.find((uid: string) => uid !== usuarioAtual.uid);
+
+        let nomeOutro = 'Usuário';
+        let fotoOutro = '';
+
+        if (outroUid) {
+          try {
+            const snap = await getDoc(doc(db, 'usuarios', outroUid));
+            if (snap.exists()) {
+              const data = snap.data();
+              nomeOutro = data?.nome || 'Usuário';
+              fotoOutro = data?.foto || '';
+            }
+          } catch (e) {
+            console.log('Erro ao buscar usuário:', e);
+          }
+        }
+
+        // Verifica se é nova mensagem recebida de outro usuário
+        const ultimaMsg = dadosConversa.ultimaMensagem;
+        const conversaId = docItem.id;
+
+        const msgAnterior = conversasAntigas[conversaId];
+        const isNova = ultimaMsg && msgAnterior !== ultimaMsg;
+
+       const remetente = dadosConversa?.remetente || '';
+
+if (isNova && remetente !== usuarioAtual.uid) {
+  enviarNotificacaoLocal(nomeOutro, ultimaMsg);
+}
+
+
+        conversasAntigas[conversaId] = ultimaMsg;
+
+        return {
+          id: conversaId,
+          usuarios: dadosConversa.usuarios,
+          ultimaMensagem: ultimaMsg,
+          nomeOutroUsuario: nomeOutro,
+          fotoOutroUsuario: fotoOutro
+        };
+      })
     );
 
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const dados = await Promise.all(
-        snapshot.docs.map(async (docItem) => {
-          const dadosConversa = docItem.data();
-          const outroUid = dadosConversa.usuarios.find((uid: string) => uid !== usuarioAtual.uid);
+    setConversas(dados);
+  });
 
-          let nomeOutro = 'Usuário';
-          let fotoOutro = '';
+  return () => unsubscribe();
+}, [usuarioAtual]);
 
-          if (outroUid) {
-            try {
-              const snap = await getDoc(doc(db, 'usuarios', outroUid));
-              if (snap.exists()) {
-                const data = snap.data();
-                nomeOutro = data?.nome || 'Usuário';
-                fotoOutro = data?.foto || '';
-              }
-            } catch (e) {
-              console.log('Erro ao buscar usuário:', e);
-            }
-          }
-
-          return {
-            id: docItem.id,
-            usuarios: dadosConversa.usuarios,
-            ultimaMensagem: dadosConversa.ultimaMensagem,
-            nomeOutroUsuario: nomeOutro,
-            fotoOutroUsuario: fotoOutro
-          };
-        })
-      );
-
-      setConversas(dados);
-    });
-
-    return () => unsubscribe();
-  }, [usuarioAtual]);
 
   useLayoutEffect(() => {
     navigation.setOptions({

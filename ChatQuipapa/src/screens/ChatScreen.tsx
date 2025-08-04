@@ -133,10 +133,12 @@ export default function ChatScreen() {
     });
 
     const conversaRef = doc(db, 'conversas', conversaId);
-    await updateDoc(conversaRef, {
-      ultimaMensagem: novaMensagem,
-      timestamp: Date.now()
-    });
+await updateDoc(conversaRef, {
+  ultimaMensagem: novaMensagem,
+  remetente: usuarioAtual.uid, // 👈 isso é fundamental para evitar notificação para si mesmo
+  timestamp: Date.now()
+});
+
 
     setNovaMensagem('');
   };
@@ -194,9 +196,17 @@ export default function ChatScreen() {
             placeholderTextColor="#888"
             style={styles.input}
           />
-          <TouchableOpacity onPress={enviarMensagem} style={styles.botaoEnviar}>
-            <Text style={styles.enviarTexto}>Enviar</Text>
-          </TouchableOpacity>
+<TouchableOpacity
+  onPress={enviarMensagem}
+  style={[
+    styles.botaoEnviar,
+    { opacity: novaMensagem.trim() ? 1 : 0.5 }
+  ]}
+  disabled={!novaMensagem.trim()}
+>
+  <Text style={styles.enviarTexto}>Enviar</Text>
+</TouchableOpacity>
+
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
