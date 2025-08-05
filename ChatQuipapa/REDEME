@@ -1,3 +1,2 @@
-Comando para gera apk pelo terminal 
-npx eas build --platform android --profile preview
-eas build --platform android
+Comando para gera apk pelo terminal - gerar um .apk.
+eas build -p android --profile preview

@@ -15,8 +15,9 @@ type Conversa = {
   id: string;
   usuarios: string[];
   ultimaMensagem?: string;
-  nomeOutroUsuario: string;
-  fotoOutroUsuario?: string;
+  nomeOutroUsuario: string;      // para exibição no card (grupo ou direto)
+  fotoOutroUsuario?: string;     // fotoGrupo ou foto do outro usuário
+  tipo?: 'direta' | 'grupo';
 };
 
 export default function ChatListScreen() {
@@ -28,12 +29,11 @@ export default function ChatListScreen() {
   const abrirMenu = () => setMenuVisible(true);
   const fecharMenu = () => setMenuVisible(false);
 
-  // SAIR: faz logout e redireciona para Login
   const sair = async () => {
     try {
       await signOut(auth);
       fecharMenu();
-      // @ts-ignore (ajuste se o nome da rota de login for diferente)
+      // @ts-ignore
       navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
     } catch (e: any) {
       Alert.alert('Erro ao sair', e?.message ?? 'Tente novamente.');
@@ -48,50 +48,54 @@ export default function ChatListScreen() {
       where('usuarios', 'array-contains', usuarioAtual.uid)
     );
 
-    let conversasAntigas: Record<string, string> = {}; // últimas mensagens anteriores
+    let conversasAntigas: Record<string, string> = {};
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       const dados = await Promise.all(
         snapshot.docs.map(async (docItem) => {
-          const dadosConversa = docItem.data();
-          const outroUid = dadosConversa.usuarios.find((uid: string) => uid !== usuarioAtual.uid);
+          const dadosConversa: any = docItem.data();
+          const conversaId = docItem.id;
 
-          let nomeOutro = 'Usuário';
-          let fotoOutro = '';
+          let nomeParaLista = 'Usuário';
+          let fotoParaLista = '';
 
-          if (outroUid) {
-            try {
-              const snap = await getDoc(doc(db, 'usuarios', outroUid));
-              if (snap.exists()) {
-                const data = snap.data();
-                nomeOutro = (data as any)?.nome || 'Usuário';
-                fotoOutro = (data as any)?.foto || '';
+          if (dadosConversa?.tipo === 'grupo') {
+            nomeParaLista = dadosConversa?.nomeGrupo || 'Grupo';
+            fotoParaLista = dadosConversa?.fotoGrupo || '';
+          } else {
+            const outroUid = dadosConversa.usuarios?.find((uid: string) => uid !== usuarioAtual.uid);
+            if (outroUid) {
+              try {
+                const snap = await getDoc(doc(db, 'usuarios', outroUid));
+                if (snap.exists()) {
+                  const data = snap.data() as any;
+                  nomeParaLista = data?.nome || 'Usuário';
+                  fotoParaLista = data?.foto || '';
+                }
+              } catch (e) {
+                console.log('Erro ao buscar usuário:', e);
               }
-            } catch (e) {
-              console.log('Erro ao buscar usuário:', e);
             }
           }
 
           const ultimaMsg = dadosConversa.ultimaMensagem;
-          const conversaId = docItem.id;
-
           const msgAnterior = conversasAntigas[conversaId];
           const isNova = ultimaMsg && msgAnterior !== ultimaMsg;
-
           const remetente = dadosConversa?.remetente || '';
-          if (isNova && remetente !== usuarioAtual.uid) {
-            enviarNotificacaoLocal(nomeOutro, ultimaMsg);
-          }
 
+          if (isNova && remetente !== usuarioAtual.uid) {
+            enviarNotificacaoLocal(nomeParaLista, ultimaMsg);
+          }
           conversasAntigas[conversaId] = ultimaMsg;
 
           return {
             id: conversaId,
-            usuarios: dadosConversa.usuarios,
+            usuarios: dadosConversa.usuarios || [],
             ultimaMensagem: ultimaMsg,
-            nomeOutroUsuario: nomeOutro,
-            fotoOutroUsuario: fotoOutro
-          };
+            nomeOutroUsuario: nomeParaLista,
+            fotoOutroUsuario: fotoParaLista,
+            tipo: dadosConversa?.tipo === 'grupo' ? 'grupo' : 'direta',
+          } as Conversa;
         })
       );
 
@@ -109,11 +113,7 @@ export default function ChatListScreen() {
           onDismiss={fecharMenu}
           anchor={
             <View style={{ paddingRight: 8 }}>
-              <IconButton
-                icon="dots-vertical"
-                onPress={abrirMenu}
-                size={24}
-              />
+              <IconButton icon="dots-vertical" onPress={abrirMenu} size={24} />
             </View>
           }
         >
@@ -124,6 +124,14 @@ export default function ChatListScreen() {
               navigation.navigate('PerfilUsuario');
             }}
             title="Perfil"
+          />
+          <Menu.Item
+            onPress={() => {
+              fecharMenu();
+              // @ts-ignore
+              navigation.navigate('CriarGrupo'); // 🔹 novo item do menu
+            }}
+            title="Criar grupo"
           />
           <Divider />
           <Menu.Item onPress={sair} title="Sair" />
@@ -137,7 +145,8 @@ export default function ChatListScreen() {
     // @ts-ignore
     navigation.navigate('Chat', {
       conversaId: conversa.id,
-      usuarios: conversa.usuarios
+      usuarios: conversa.usuarios,
+      tipo: conversa.tipo || 'direta',
     });
   };
 
@@ -186,63 +195,21 @@ export default function ChatListScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingTop: 20,
-    paddingHorizontal: 20,
-    backgroundColor: '#fff',
-  },
-  titulo: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  itemConversa: {
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
-  },
-  linha: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  nome: {
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#ddd',
-  },
+  container: { flex: 1, paddingTop: 20, paddingHorizontal: 20, backgroundColor: '#fff' },
+  titulo: { fontSize: 24, fontWeight: 'bold', marginBottom: 10 },
+  itemConversa: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#ddd' },
+  linha: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  nome: { fontWeight: 'bold', fontSize: 16 },
+  avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#ddd' },
   avatarPlaceholder: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#eee',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 42, height: 42, borderRadius: 21, backgroundColor: '#eee',
+    justifyContent: 'center', alignItems: 'center',
   },
   botaoFlutuante: {
-    position: 'absolute',
-    bottom: 30,
-    right: 30,
-    backgroundColor: '#2196F3',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    position: 'absolute', bottom: 30, right: 30, backgroundColor: '#2196F3',
+    width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center',
+    elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3, shadowRadius: 4,
   },
-  botaoTexto: {
-    fontSize: 30,
-    color: '#fff',
-  },
+  botaoTexto: { fontSize: 30, color: '#fff' },
 });

@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+
 import LoginScreen from '../screens/LoginScreen';
 import CadastroScreen from '../screens/CadastroScreen';
 import ChatListScreen from '../screens/ChatListScreen';
 import ChatScreen from '../screens/ChatScreen';
 import ListaUsuariosScreen from '../screens/ListaUsuariosScreen';
 import PerfilUsuarioScreen from '../screens/PerfilUsuarioScreen';
+import CriarGrupoScreen from '../screens/CriarGrupoScreen'; // ✅ ajuste o caminho conforme sua pasta
 
 import { auth } from '../../firebaseConfig';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -18,9 +20,11 @@ export type RootStackParamList = {
   ChatList: undefined;
   ListaUsuarios: undefined;
   PerfilUsuario: undefined;
+  CriarGrupo: undefined; // ✅ nova rota
   Chat: {
     conversaId: string;
     usuarios: string[];
+    tipo?: 'direta' | 'grupo'; // ✅ permite grupo
   };
 };
 
@@ -30,13 +34,11 @@ export default function AppNavigator() {
   const [usuario, setUsuario] = useState<User | null>(null);
   const [carregando, setCarregando] = useState(true);
 
-  // Detecta se o usuário está logado
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUsuario(user);
       setCarregando(false);
     });
-
     return unsubscribe;
   }, []);
 
@@ -76,10 +78,15 @@ export default function AppNavigator() {
               component={ListaUsuariosScreen}
               options={{ headerShown: false }}
             />
-            <Stack.Screen 
-              name="PerfilUsuario" 
-              component={PerfilUsuarioScreen} 
-              options={{ title: 'Meu Perfil' }} 
+            <Stack.Screen
+              name="PerfilUsuario"
+              component={PerfilUsuarioScreen}
+              options={{ title: 'Meu Perfil' }}
+            />
+            <Stack.Screen
+              name="CriarGrupo"                 // ✅ AGORA DENTRO DO STACK
+              component={CriarGrupoScreen}
+              options={{ title: 'Criar grupo' }}
             />
             <Stack.Screen
               name="Chat"
