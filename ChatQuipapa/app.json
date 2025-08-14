@@ -12,24 +12,19 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "ios": {
-      "supportsTablet": true
-    },
+    "ios": { "supportsTablet": true },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.tallysson_dev.ChatQuipapa"
+      "package": "com.tallyssondev.chatquipapa"
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "3d7b2b6a-63f6-46eb-bb3b-db4a32ebab00"
-      }
-    }
+    "plugins": [
+      ["expo-notifications", { "icon": "./assets/icon.png", "color": "#ffffff" }]
+    ],
+    "web": { "favicon": "./assets/favicon.png" },
+    "extra": { "eas": { "projectId": "3d7b2b6a-63f6-46eb-bb3b-db4a32ebab00" } }
   }
 }
