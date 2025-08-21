@@ -1,2 +1,7 @@
-Comando para gera apk pelo terminal - gerar um .apk.
+
+# salvar mudanças
+git add app.json
+git commit -m "fix: slug to ChatQuipapa"
+
+#Comando para gera apk pelo terminal - gerar um .apk.
 eas build -p android --profile preview
